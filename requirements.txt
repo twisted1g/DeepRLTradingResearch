@@ -1,0 +1,16 @@
+# Core
+numpy
+pandas
+matplotlib
+
+# RL
+pytorch
+stable-baselines3
+
+gymnasium
+
+# Utils
+scipy
+
+# Optional indicators
+# ta
