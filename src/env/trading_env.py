@@ -57,6 +57,8 @@ class MyTradingEnv(Env):
         self.last_exit_reason = None
         self.prev_portfolio_value = self.initial_balance
         self.portfolio_history = []
+        self.step_history = []
+        self.episode_id = 0
 
     def _get_observation(self) -> np.ndarray:
         if "close" not in self.df.columns:
@@ -166,8 +168,6 @@ class MyTradingEnv(Env):
         reward = self._calculate_reward(done)
 
         obs = self._get_observation()
-        self.portfolio_history.append(float(self.portfolio_value))
-
         info = {
             "portfolio_value": float(self.portfolio_value),
             "position": int(self.position),
@@ -176,6 +176,15 @@ class MyTradingEnv(Env):
             "n_trades": len(self.trade_history),
             "last_exit_reason": self.last_exit_reason,
         }
+
+        self.portfolio_history.append(float(self.portfolio_value))
+        self._log_step(
+            action=action,
+            reward=reward,
+            terminated=terminated,
+            truncated=truncated,
+            info=info,
+        )
 
         return obs, reward, terminated, truncated, info
 
@@ -204,6 +213,7 @@ class MyTradingEnv(Env):
         self.prev_portfolio_value = float(self.initial_balance)
         self.last_exit_reason = None
         self.portfolio_history = [float(self.portfolio_value)]
+        self.episode_id += 1
 
         obs = self._get_observation()
         return obs, {}
@@ -217,3 +227,54 @@ class MyTradingEnv(Env):
                 f"Position: {'Long' if self.position == 1 else 'Flat'} | "
                 f"Hold time: {self.current_holding_time} | Trades: {len(self.trade_history)}"
             )
+
+    def _log_step(
+        self,
+        action: int,
+        reward: float,
+        terminated: bool,
+        truncated: bool,
+        info: Dict[str, Any],
+    ) -> None:
+        df_index = int(self.current_step - 1)
+        row = {
+            "episode": int(self.episode_id),
+            "step": int(self._steps_elapsed),
+            "df_index": df_index,
+            "action": int(action),
+            "reward": float(reward),
+            "terminated": bool(terminated),
+            "truncated": bool(truncated),
+            "portfolio_value": float(self.portfolio_value),
+            "cash": float(self.cash),
+            "position": int(self.position),
+            "units": float(self.units),
+            "entry_price": float(self.entry_price),
+            "position_value": float(self.position_value),
+            "holding_time": int(self.current_holding_time),
+            "current_price": float(info.get("current_price", np.nan)),
+            "n_trades": int(info.get("n_trades", len(self.trade_history))),
+            "last_exit_reason": info.get("last_exit_reason"),
+        }
+
+        if self.position == 1 and self.entry_price > 0:
+            row["unrealized_pnl"] = float(self.position_value - (self.units * self.entry_price))
+        else:
+            row["unrealized_pnl"] = 0.0
+
+        if "timestamp" in self.df.columns:
+            row["timestamp"] = self.df.iloc[df_index]["timestamp"]
+        elif "date" in self.df.columns:
+            row["date"] = self.df.iloc[df_index]["date"]
+
+        self.step_history.append(row)
+
+    def get_steps_df(self) -> pd.DataFrame:
+        return pd.DataFrame(self.step_history)
+
+    def get_trades_df(self) -> pd.DataFrame:
+        return pd.DataFrame(self.trade_history)
+
+    def clear_history(self) -> None:
+        self.step_history = []
+        self.trade_history = []

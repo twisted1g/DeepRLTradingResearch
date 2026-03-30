@@ -8,9 +8,9 @@ from binance.client import Client
 
 SYMBOL = "BTCUSDT"
 INTERVAL = "1h"
-START_STR = "1 Jan, 2020"
-END_STR = "1 Jan, 2021"
-OUTPUT_CSV = Path("data/raw/binance_BTCUSDT_1h_2020.csv")
+START_STR = "1 Jan, 2021"
+END_STR = "1 Jan, 2022"
+OUTPUT_CSV = Path("data/raw/binance_BTCUSDT_1h_2021.csv")
 
 
 def _klines_to_df(klines) -> pd.DataFrame:
@@ -24,7 +24,6 @@ def _klines_to_df(klines) -> pd.DataFrame:
     if not klines:
         return pd.DataFrame(columns=columns)
 
-    # Binance kline format includes 12 fields; keep the OHLCV slice.
     if len(klines[0]) >= 6:
         rows = [[k[1], k[2], k[3], k[4], k[5]] for k in klines]
     elif len(klines[0]) == 5:
