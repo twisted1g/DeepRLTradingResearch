@@ -36,7 +36,7 @@ class MyTradingEnv(Env):
         self.observation_space = spaces.Box(
             low=-np.inf,
             high=np.inf,
-            shape=(3,),
+            shape=(2,),
             dtype=np.float32,
         )
 
@@ -56,6 +56,7 @@ class MyTradingEnv(Env):
         self._steps_elapsed = 0
         self.last_exit_reason = None
         self.prev_portfolio_value = self.initial_balance
+        self.portfolio_history = []
 
     def _get_observation(self) -> np.ndarray:
         if "close" not in self.df.columns:
@@ -68,19 +69,7 @@ class MyTradingEnv(Env):
         else:
             price_return = 0.0
 
-        if self.position == 0:
-            pnl_state = 0
-        else:
-            pnl_pct = (current_price - self.entry_price) / self.entry_price
-            threshold = max(self.commission * 4, 0.005)
-            if pnl_pct <= -threshold:
-                pnl_state = 1
-            elif pnl_pct >= threshold:
-                pnl_state = 2
-            else:
-                pnl_state = 0
-
-        return np.array([price_return, float(self.position), float(pnl_state)], dtype=np.float32)
+        return np.array([price_return, float(self.position)], dtype=np.float32)
 
     def _calculate_reward(self, done: bool) -> float:
         if self.prev_portfolio_value <= 0.0:
@@ -177,6 +166,7 @@ class MyTradingEnv(Env):
         reward = self._calculate_reward(done)
 
         obs = self._get_observation()
+        self.portfolio_history.append(float(self.portfolio_value))
 
         info = {
             "portfolio_value": float(self.portfolio_value),
@@ -213,6 +203,7 @@ class MyTradingEnv(Env):
 
         self.prev_portfolio_value = float(self.initial_balance)
         self.last_exit_reason = None
+        self.portfolio_history = [float(self.portfolio_value)]
 
         obs = self._get_observation()
         return obs, {}

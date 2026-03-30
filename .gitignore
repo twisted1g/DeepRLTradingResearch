@@ -1,1 +1,48 @@
+# Project notes
 TECHREC.md
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+*.so
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+.cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+.python-version
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Build outputs
+build/
+dist/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Local configs/secrets
+.env
+.env.*
+
+# Experiment artifacts
+models/
+logs/
+runs/
+wandb/
+
+# Data (raw/processed outputs)
+data/raw/
+data/processed/

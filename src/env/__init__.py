@@ -1,3 +1,3 @@
-from .trading_env import TradingEnv, TradingEnvConfig
+from .trading_env import MyTradingEnv
 
-__all__ = ["TradingEnv", "TradingEnvConfig"]
+__all__ = ["MyTradingEnv"]
