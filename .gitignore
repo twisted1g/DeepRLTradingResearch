@@ -42,6 +42,8 @@ models/
 logs/
 runs/
 wandb/
+*.zip
+*.tfevents*
 
 # Data (raw/processed outputs)
 data/raw/
