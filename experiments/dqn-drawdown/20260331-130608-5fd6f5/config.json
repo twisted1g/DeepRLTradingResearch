@@ -1,0 +1,14 @@
+{
+  "batch_size": 64,
+  "buffer_size": 50000,
+  "exploration_final_eps": 0.05,
+  "exploration_fraction": 0.2,
+  "gamma": 0.99,
+  "learning_rate": 0.001,
+  "learning_starts": 1000,
+  "seed": 42,
+  "target_update_interval": 1000,
+  "total_timesteps": 30000,
+  "train_freq": 4,
+  "verbose": 1
+}
