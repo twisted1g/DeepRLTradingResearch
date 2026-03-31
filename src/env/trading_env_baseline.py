@@ -9,6 +9,7 @@ from gymnasium import Env, spaces
 
 class MyTradingEnv(Env):
     metadata = {"render_modes": ["human"], "render_fps": 4}
+    feature_window: int = 20
 
     def __init__(
         self,
@@ -36,7 +37,7 @@ class MyTradingEnv(Env):
         self.observation_space = spaces.Box(
             low=-np.inf,
             high=np.inf,
-            shape=(2,),
+            shape=(4,),
             dtype=np.float32,
         )
 
@@ -61,17 +62,44 @@ class MyTradingEnv(Env):
         self.episode_id = 0
 
     def _get_observation(self) -> np.ndarray:
+        return self._get_feature_vector_at(self.current_step)
+
+    def _get_feature_vector_at(self, step_index: int) -> np.ndarray:
         if "close" not in self.df.columns:
             raise ValueError("DataFrame must contain 'close' column")
+        if "volume" not in self.df.columns:
+            raise ValueError("DataFrame must contain 'volume' column")
 
-        current_price = float(self.df.iloc[self.current_step]["close"])
-        if self.current_step > 0:
-            prev_price = float(self.df.iloc[self.current_step - 1]["close"])
-            price_return = (current_price / prev_price) - 1.0 if prev_price > 0 else 0.0
+        current_price = float(self.df.iloc[step_index]["close"])
+        if step_index > 0:
+            prev_price = float(self.df.iloc[step_index - 1]["close"])
+            log_return = (
+                float(np.log(current_price / prev_price)) if prev_price > 0 else 0.0
+            )
         else:
-            price_return = 0.0
+            log_return = 0.0
 
-        return np.array([price_return, float(self.position)], dtype=np.float32)
+        start = max(1, step_index - self.feature_window + 1)
+        log_returns = []
+        for i in range(start, step_index + 1):
+            prev_price = float(self.df.iloc[i - 1]["close"])
+            curr_price = float(self.df.iloc[i]["close"])
+            if prev_price > 0 and curr_price > 0:
+                log_returns.append(float(np.log(curr_price / prev_price)))
+            else:
+                log_returns.append(0.0)
+
+        rolling_volatility = float(np.std(log_returns)) if len(log_returns) > 1 else 0.0
+
+        vol_start = max(0, step_index - self.feature_window + 1)
+        volume_window = self.df.iloc[vol_start : step_index + 1]["volume"].astype(float)
+        volume_mean = float(volume_window.mean()) if len(volume_window) > 0 else 0.0
+        volume_norm = float(volume_window.iloc[-1] / volume_mean) if volume_mean > 0 else 0.0
+
+        return np.array(
+            [log_return, rolling_volatility, volume_norm, float(self.position)],
+            dtype=np.float32,
+        )
 
     def _calculate_reward(self, done: bool) -> float:
         if self.prev_portfolio_value <= 0.0:
@@ -88,8 +116,9 @@ class MyTradingEnv(Env):
         self.prev_portfolio_value = self.portfolio_value
         current_price = float(self.df.iloc[self.current_step]["close"])
         self.last_exit_reason = None
+        target_position = 0 if action == 0 else (1 if action == 1 else -1)
 
-        if self.position == 0 and action == 1:
+        def open_long() -> None:
             price_with_slip = current_price * (1.0 + self.slippage)
             invest_amount = self.portfolio_value
             commission_fee = invest_amount * self.commission
@@ -100,16 +129,78 @@ class MyTradingEnv(Env):
             self.position = 1
             self.current_holding_time = 0
             self.max_drawdown = 0.0
-            self.cash = self.portfolio_value - units * price_with_slip - commission_fee
+            self.cash = max(0.0, self.portfolio_value - units * price_with_slip - commission_fee)
             self.position_value = units * current_price
             self.portfolio_value = self.cash + self.position_value
 
-        elif self.position == 1:
-            self.current_holding_time += 1
-            self.position_value = self.units * current_price
+        def open_short() -> None:
+            price_with_slip = current_price * (1.0 - self.slippage)
+            invest_amount = self.portfolio_value
+            commission_fee = invest_amount * self.commission
+            units = (invest_amount - commission_fee) / price_with_slip
+
+            self.units = float(units)
+            self.entry_price = price_with_slip
+            self.position = -1
+            self.current_holding_time = 0
+            self.max_drawdown = 0.0
+            proceeds = units * price_with_slip
+            self.cash = max(0.0, self.portfolio_value + proceeds - commission_fee)
+            self.position_value = -units * current_price
             self.portfolio_value = self.cash + self.position_value
 
-            unrealized_pnl = self.position_value - (self.units * self.entry_price)
+        def close_position(exit_reason: str) -> None:
+            self.last_exit_reason = exit_reason
+
+            if self.position == 1:
+                exit_price = current_price * (1.0 - self.slippage)
+                exit_value = self.units * exit_price
+                commission_fee = exit_value * self.commission
+                pnl = exit_value - (self.units * self.entry_price) - commission_fee
+                self.cash += exit_value - commission_fee
+            else:
+                exit_price = current_price * (1.0 + self.slippage)
+                exit_value = self.units * exit_price
+                commission_fee = exit_value * self.commission
+                pnl = (self.units * self.entry_price) - exit_value - commission_fee
+                self.cash -= exit_value + commission_fee
+
+            self.position_value = 0.0
+            self.portfolio_value = self.cash
+
+            self.trade_history.append(
+                {
+                    "entry_price": self.entry_price,
+                    "exit_price": exit_price,
+                    "pnl": float(pnl),
+                    "units": float(self.units),
+                    "holding_time": int(self.current_holding_time),
+                    "max_drawdown": float(self.max_drawdown),
+                    "exit_reason": self.last_exit_reason,
+                }
+            )
+
+            self.units = 0.0
+            self.entry_price = 0.0
+            self.position = 0
+            self.current_holding_time = 0
+            self.max_drawdown = 0.0
+
+        if self.position == 0:
+            if target_position == 1:
+                open_long()
+            elif target_position == -1:
+                open_short()
+        else:
+            self.current_holding_time += 1
+            if self.position == 1:
+                self.position_value = self.units * current_price
+                unrealized_pnl = self.position_value - (self.units * self.entry_price)
+            else:
+                self.position_value = -self.units * current_price
+                unrealized_pnl = (self.units * self.entry_price) - (self.units * current_price)
+            self.portfolio_value = self.cash + self.position_value
+
             current_drawdown = (
                 -unrealized_pnl / (self.units * self.entry_price + 1e-12)
                 if unrealized_pnl < 0
@@ -117,46 +208,21 @@ class MyTradingEnv(Env):
             )
             self.max_drawdown = max(self.max_drawdown, current_drawdown)
 
-            should_close = (
-                action == 2
-                or self.current_holding_time >= self.max_holding_time
+            forced_close = (
+                self.current_holding_time >= self.max_holding_time
                 or current_drawdown >= self.max_drawdown_threshold
             )
 
-            if should_close:
-                if action == 2:
-                    self.last_exit_reason = "agent"
-                elif self.current_holding_time >= self.max_holding_time:
-                    self.last_exit_reason = "time"
-                else:
-                    self.last_exit_reason = "drawdown"
-
-                exit_price = current_price * (1.0 - self.slippage)
-                exit_value = self.units * exit_price
-                commission_fee = exit_value * self.commission
-                pnl = exit_value - (self.units * self.entry_price) - commission_fee
-
-                self.cash += exit_value - commission_fee
-                self.position_value = 0.0
-                self.portfolio_value = self.cash
-
-                self.trade_history.append(
-                    {
-                        "entry_price": self.entry_price,
-                        "exit_price": exit_price,
-                        "pnl": float(pnl),
-                        "units": float(self.units),
-                        "holding_time": int(self.current_holding_time),
-                        "max_drawdown": float(self.max_drawdown),
-                        "exit_reason": self.last_exit_reason,
-                    }
-                )
-
-                self.units = 0.0
-                self.entry_price = 0.0
-                self.position = 0
-                self.current_holding_time = 0
-                self.max_drawdown = 0.0
+            if forced_close:
+                reason = "time" if self.current_holding_time >= self.max_holding_time else "drawdown"
+                close_position(reason)
+                target_position = 0
+            elif target_position != self.position:
+                close_position("agent")
+                if target_position == 1:
+                    open_long()
+                elif target_position == -1:
+                    open_short()
 
         self.current_step += 1
         self._steps_elapsed += 1
@@ -222,9 +288,15 @@ class MyTradingEnv(Env):
         if mode == "human":
             step = self.current_step
             total = len(self.df) - 1
+            if self.position == 1:
+                pos_label = "Long"
+            elif self.position == -1:
+                pos_label = "Short"
+            else:
+                pos_label = "Flat"
             print(
                 f"Step: {step}/{total} | Portfolio: ${self.portfolio_value:,.2f} | "
-                f"Position: {'Long' if self.position == 1 else 'Flat'} | "
+                f"Position: {pos_label} | "
                 f"Hold time: {self.current_holding_time} | Trades: {len(self.trade_history)}"
             )
 
@@ -257,8 +329,11 @@ class MyTradingEnv(Env):
             "last_exit_reason": info.get("last_exit_reason"),
         }
 
-        if self.position == 1 and self.entry_price > 0:
-            row["unrealized_pnl"] = float(self.position_value - (self.units * self.entry_price))
+        if self.entry_price > 0 and self.position != 0:
+            if self.position == 1:
+                row["unrealized_pnl"] = float(self.position_value - (self.units * self.entry_price))
+            else:
+                row["unrealized_pnl"] = float((self.units * self.entry_price) - (self.units * row["current_price"]))
         else:
             row["unrealized_pnl"] = 0.0
 
