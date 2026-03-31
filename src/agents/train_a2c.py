@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict
 
-from stable_baselines3 import DQN
+from stable_baselines3 import A2C
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import DummyVecEnv
 
@@ -11,46 +11,42 @@ from .experiment import Experiment
 
 
 @dataclass
-class DQNConfig:
+class A2CConfig:
     total_timesteps: int = 50_000
-    learning_rate: float = 1e-3
-    buffer_size: int = 50_000
-    learning_starts: int = 1_000
-    batch_size: int = 64
+    learning_rate: float = 7e-4
+    n_steps: int = 5
     gamma: float = 0.99
-    train_freq: int = 4
-    target_update_interval: int = 1_000
-    exploration_fraction: float = 0.2
-    exploration_final_eps: float = 0.05
+    gae_lambda: float = 1.0
+    ent_coef: float = 0.0
+    vf_coef: float = 0.5
+    max_grad_norm: float = 0.5
     seed: int = 42
     verbose: int = 1
 
 
-def train_dqn(
+def train_a2c(
     env,
-    config: DQNConfig | None = None,
+    config: A2CConfig | None = None,
     experiment: Experiment | None = None,
 ) -> Dict[str, object]:
     if config is None:
-        config = DQNConfig()
+        config = A2CConfig()
 
     if experiment is not None:
         env = Monitor(env, filename=str(experiment.dir / "monitor.csv"))
         experiment.save_config(config)
 
     vec_env = DummyVecEnv([lambda: env])
-    model = DQN(
+    model = A2C(
         "MlpPolicy",
         vec_env,
         learning_rate=config.learning_rate,
-        buffer_size=config.buffer_size,
-        learning_starts=config.learning_starts,
-        batch_size=config.batch_size,
+        n_steps=config.n_steps,
         gamma=config.gamma,
-        train_freq=config.train_freq,
-        target_update_interval=config.target_update_interval,
-        exploration_fraction=config.exploration_fraction,
-        exploration_final_eps=config.exploration_final_eps,
+        gae_lambda=config.gae_lambda,
+        ent_coef=config.ent_coef,
+        vf_coef=config.vf_coef,
+        max_grad_norm=config.max_grad_norm,
         seed=config.seed,
         verbose=config.verbose,
     )
