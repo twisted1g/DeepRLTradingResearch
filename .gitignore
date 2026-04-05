@@ -17,7 +17,6 @@ coverage.xml
 # Virtual environments
 .venv/
 venv/
-env/
 .python-version
 
 # Jupyter
@@ -48,3 +47,4 @@ wandb/
 # Data (raw/processed outputs)
 data/raw/
 data/processed/
+src/encoders/lstm_encoder.pt

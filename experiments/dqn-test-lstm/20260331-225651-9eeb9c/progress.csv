@@ -1,0 +1,3 @@
+rollout/exploration_rate,train/loss,time/episodes,train/learning_rate,rollout/ep_len_mean,time/fps,time/time_elapsed,train/n_updates,rollout/ep_rew_mean,time/total_timesteps
+0.05,0.05078274756669998,4,0.001,1000.0,20,197,749,-35.413388250000004,4000
+0.05,0.043607521802186966,8,0.001,1000.0,20,394,1749,-25.9237125,8000

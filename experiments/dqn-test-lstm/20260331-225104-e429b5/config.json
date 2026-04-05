@@ -8,7 +8,7 @@
   "learning_starts": 1000,
   "seed": 42,
   "target_update_interval": 1000,
-  "total_timesteps": 30000,
+  "total_timesteps": 100000,
   "train_freq": 4,
   "verbose": 1
 }

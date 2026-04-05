@@ -8,9 +8,9 @@ from binance.client import Client
 
 SYMBOL = "BTCUSDT"
 INTERVAL = "1h"
-START_STR = "1 Jan, 2021"
-END_STR = "1 Jan, 2022"
-OUTPUT_CSV = Path("data/raw/binance_BTCUSDT_1h_2021.csv")
+START_STR = "1 Jan, 2024"
+END_STR = "1 Jan, 2025"
+OUTPUT_CSV = Path("data/raw/binance_BTCUSDT_1h_2024.csv")
 
 
 def _klines_to_df(klines) -> pd.DataFrame:

@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import torch
 from gymnasium import spaces
+from pathlib import Path
 
 from .trading_env_baseline import MyTradingEnv
 
@@ -25,7 +26,7 @@ class MyTradingEnvLSTM(MyTradingEnv):
         lstm_hidden_size: int = 64,
         lstm_layers: int = 2,
         lstm_encoder: Optional[torch.nn.LSTM] = None,
-        lstm_checkpoint_path: Optional[str] = "../encoders/lstm_encoder.pt",
+        lstm_checkpoint_path: Optional[str] = None,
         lstm_device: str = "cpu",
         **kwargs,
     ):
@@ -49,8 +50,13 @@ class MyTradingEnvLSTM(MyTradingEnv):
         if lstm_encoder is None and lstm_checkpoint_path is not None:
             from encoders.lstm_pretrain import load_lstm_encoder
 
+            checkpoint_path = Path(lstm_checkpoint_path)
+            if not checkpoint_path.is_absolute():
+                project_root = Path(__file__).resolve().parents[2]
+                checkpoint_path = project_root / checkpoint_path
+
             self.lstm_encoder = load_lstm_encoder(
-                lstm_checkpoint_path,
+                str(checkpoint_path),
                 device=self.lstm_device,
             )
         elif lstm_encoder is None:
